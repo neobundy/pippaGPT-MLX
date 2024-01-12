@@ -276,4 +276,4 @@ pip install --upgrade langchain
 
 ## License
 
-Pippa is released under the [Apache 2.0 License](LICENSE). Feel free to use, modify, and distribute the code for personal or commercial purposes.
+Pippa is released under the MIT license. Feel free to use, modify, and distribute the code for personal or commercial purposes.
