@@ -36,13 +36,13 @@ To install Pippa, follow these steps:
 1. Clone the repository:
 
 ```bash
-   git clone https://github.com/neobundy/pippaGPT.git
+   git clone https://github.com/neobundy/pippaGPT-MLX.git
 ```
 
 2. Navigate to the project directory: 
 
 ```bash
-   cd pippaGPT
+   cd pippaGPT-MLX
 ```
 
 3. Install the required dependencies: 
@@ -153,7 +153,7 @@ To ingest your own documents for Pippa to learn from, follow these steps:
 
 If you have an ElevenLabs API key, you can use their TTS(Text-to-Speech) engine with Pippa. 
 
-STT(Speech-to-Text) is handled by OpenAI's Whisper-1 model.
+STT(Speech-to-Text) is handled by OpenAI's Whisper-1 model or MLX Whisper depending on your choice in WebUI.
 
 Follow these steps:
 
