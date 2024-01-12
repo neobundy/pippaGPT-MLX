@@ -1,4 +1,4 @@
-# PippaGPT - Personalized, Ingesting, Persistent, Polymorphic, Adaptive GPT Chatbot
+# PippaGPT MLX - Personalized, Ingesting, Persistent, Polymorphic, Adaptive GPT Chatbot
 
 ![Pippa Logo](images/ai.png)
 
