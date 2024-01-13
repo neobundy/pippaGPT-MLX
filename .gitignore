@@ -11,3 +11,4 @@ __pycache__
 pippa.log
 settings_private.py
 settings.py
+last_user_input.md
