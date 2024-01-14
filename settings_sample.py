@@ -13,7 +13,7 @@ LOG_FILE = "pippa.log"
 
 # Project
 PROJECT_TITLE = f"Pippa - Personalized, Ingesting, Persistent, Polymorphic, Adaptive GPT Chatbot"
-VERSION = "MLX 0.1a"
+VERSION = "MLX 0.2a"
 
 # ZEP Long-term Memory
 ZEP_API_URL = settings_private.ZEP_API_URL
@@ -45,6 +45,20 @@ MLX_WHISPER_MODELS = [
     "models/large",
 ]
 DEFAULT_MLX_WHISPER_MODEL = MLX_WHISPER_MODELS[0]
+
+# MLX LLMs
+MLX_LLM_MODELS = [
+    "mistralai/Mistral-7B-v0.1",
+    "meta-llama/Llama-2-7b-hf",
+    "01-ai/Yi-6B-Chat",
+    "microsoft/phi-2",
+]
+
+DEFAULT_MLX_LLM_MODEL = MLX_LLM_MODELS[0]
+DEFAULT_MLX_LLM_TEMPERATURE = 0.0
+DEFAULT_MLX_LLM_MIN_TOKENS = 50
+DEFAULT_MLX_LLM_TOKENS = 200
+DEFAULT_MLX_LLM_MAX_TOKENS = 1000
 
 # GPT Models
 DEFAULT_GPT_MODEL = "gpt-4"

@@ -37,6 +37,8 @@ from langchain.prompts import (
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from pathlib import Path
 
+from mlx_lm import load, generate
+
 # Local application/library specific imports
 import helper_module
 from vectordb import retrieval_qa_run, display_vectordb_info
@@ -87,8 +89,12 @@ def init_session_state():
     st.session_state.setdefault("conversation_history", [])
     st.session_state.setdefault("zep_session_id", str(uuid4()))
     st.session_state.setdefault("memory_type", settings.DEFAULT_MEMORY_TYPE)
-    st.session_state.setdefault("use_mlx", False)
+    st.session_state.setdefault("use_mlx_whisper", False)
+    st.session_state.setdefault("use_mlx_llm", False)
     st.session_state.setdefault("mlx_whisper_model", settings.DEFAULT_MLX_WHISPER_MODEL)
+    st.session_state.setdefault("mlx_llm_model", settings.DEFAULT_MLX_LLM_MODEL)
+    st.session_state.setdefault("mlx_temperature", settings.DEFAULT_MLX_LLM_TEMPERATURE)
+    st.session_state.setdefault("mlx_tokens", settings.DEFAULT_MLX_LLM_MAX_TOKENS)
 
 
 def get_dynamic_token_parameters(model_name, memory):
@@ -434,11 +440,41 @@ def handle_message(message, i):
         st.write(f"System message: {message.content}")
 
 
+def display_mlx_panel():
+    mlx_options = st.sidebar.expander("MLX Models")
+    with mlx_options:
+        st.session_state.use_mlx_llm = st.checkbox("Use MLX", key="mlx_llm", value=False)
+        st.session_state.mlx_llm_model = st.selectbox(
+            "Choose MLX LLM:",
+            settings.MLX_LLM_MODELS,
+            index=settings.MLX_LLM_MODELS.index(settings.DEFAULT_MLX_LLM_MODEL),
+        )
+    parameters_options = st.sidebar.expander("Parameters")
+    with parameters_options:
+        st.session_state.mlx_temperature = st.slider(
+            "Temperature:",
+            min_value=0.0,
+            max_value=1.0,
+            value=settings.DEFAULT_MLX_LLM_TEMPERATURE,
+            step=0.1,
+            key="mlx1"
+        )
+
+        st.session_state.mlx_tokens = st.slider(
+            "Max Tokens:",
+            min_value=settings.DEFAULT_MLX_LLM_MIN_TOKENS,
+            max_value=settings.DEFAULT_MLX_LLM_MAX_TOKENS,
+            value=settings.DEFAULT_MLX_LLM_TOKENS,
+            step=10,
+            key="mlx2",
+        )
+
+
 def display_tts_panel():
     tts_options = st.sidebar.expander("TTS/STT")
     with tts_options:
         st.session_state.use_audio = st.checkbox("Use Audio", value=False)
-        st.session_state.use_mlx = st.checkbox("Use MLX", value=False)
+        st.session_state.use_mlx_whisper = st.checkbox("Use MLX", key="mlx_whisper", value=False)
         st.session_state.mlx_whisper_model = st.selectbox(
             "Choose MLX Whisper Model:",
             settings.MLX_WHISPER_MODELS,
@@ -456,7 +492,7 @@ def display_tts_panel():
             if r.status_code == 200:
                 st.success("Successfully recorded.")
                 audio_file = open(settings.TRANSCRIPTION_TEMP_AUDIO_FILE, "rb")
-                if st.session_state.use_mlx:
+                if st.session_state.use_mlx_whisper:
                     # MLX Whisper
                     st.session_state.transcript = whisper.transcribe(settings.TRANSCRIPTION_TEMP_AUDIO_FILE, path_or_hf_repo=st.session_state.mlx_whisper_model)["text"]
                 else:
@@ -731,102 +767,132 @@ def setup_and_cleanup(func):
 @setup_and_cleanup
 def main():
     init_page()
+    display_mlx_panel()
     display_tts_panel()
     save_snapshot = False
 
     # Chat message history that stores messages in Streamlit session state. Remember it works as context window and doesn't retain the whole conversation history!
-
     old_context_window = StreamlitChatMessageHistory("context_window")
-    new_context_window = update_context_window(old_context_window)
-    ai_model = select_model(memory=new_context_window)
 
-    helper_module.log(f"Memory type: {st.session_state.memory_type}", "info")
+    if not st.session_state.use_mlx_llm:
+        new_context_window = update_context_window(old_context_window)
+    if st.session_state.use_mlx_llm:
+        display_entire_conversation_history_panel()
 
-    display_context_window_panel(new_context_window)
-    display_entire_conversation_history_panel()
+        last_num = len(get_full_conversation_history())
+        for i, message in enumerate(get_full_conversation_history(), start=1):
+            handle_message(message, i)
 
-    last_num = len(get_full_conversation_history())
-    for i, message in enumerate(get_full_conversation_history(), start=1):
-        handle_message(message, i)
-    user_input = (
-        st.session_state.pop("transcript", "")
-        if st.session_state.use_audio
-        else st.chat_input("Prompt: ")
-    )
-
-    available_prefix_options = ["None"] + settings.ALL_PROMPT_PREFIXES
-
-    prefix_option = st.selectbox(
-        "Keyword Prefix",
-        available_prefix_options)
-
-    if user_input:
-        if prefix_option != "None":
-            user_input = f"{prefix_option} {user_input}"
-            helper_module.log(f"Keyword prefix used: {prefix_option} {user_input}", "info")
-        # try saving last user input in case of runtime error
-        save_user_input_to_file(user_input)
-        system_input = handle_user_input(user_input, last_num)
-        if system_input:
-            with (st.spinner("Pippa is typing ...")):
-                with get_openai_callback() as cb:
-                    stream_handler = StreamHandler(st.empty())
-                    if user_input.lower().startswith(settings.PROMPT_KEYWORD_PREFIX_QA):
-                        memory = ConversationBufferMemory(input_key="question",
-                                                          memory_key="history")
-                        helper_module.log(f"Retrieval QA Session Started...: {user_input}", "info")
-                        display_vectordb_info()
-                        answer, docs = retrieval_qa_run(system_input, user_input, memory, callbacks=[stream_handler])
-                        if settings.SHOW_SOURCES:
-                            helper_module.log("----------------------------------SOURCE DOCUMENTS BEGIN---------------------------")
-                            for document in docs:
-                                helper_module.log("\n> " + document.metadata["source"] + ":")
-                                helper_module.log(document.page_content)
-                            helper_module.log("----------------------------------SOURCE DOCUMENTS END---------------------------")
-                            new_context_window.save_context({"human_input": user_input}, {"output": answer})
-                    elif is_agent_query(user_input):
-                        helper_module.log(f"Agent Session Started...: {user_input}", "info")
-                        prefix, agent, user_input = get_agent_from_user_input(user_input)
-                        intermediate_answer = agent(user_input)["output"]
-                        helper_module.log(f"Agent: {prefix}", "info")
-                        helper_module.log(f"Normal Chat Session Started...: {user_input}", "info")
-                        helper_module.log(f"User message: {user_input}", "info")
-                        helper_module.log(f"Intermediate answer: {intermediate_answer}", "info")
-
-                        if prefix == settings.PROMPT_KEYWORD_PREFIX_DALLE:
-                            pattern = r'\((.*?)\)'
-                            matches = re.findall(pattern, intermediate_answer)
-                            image_url = matches[0] if matches else None
-                            markdown_string = f'<a href="{image_url}" target="_blank"><img src="{image_url}" width="{settings.DALLE_IMAGE_SCALE_FACTOR}"/></a>'
-                            st.markdown(markdown_string, unsafe_allow_html=True)
-                        st.subheader("""Intermediate Answer from Agent""")
-                        st.markdown(intermediate_answer)
-
-                        system_input = system_input + " No matter what the user asked, you must give this answer exactly as it is including the markdown formatting in the language the user asked: " + intermediate_answer
-                        helper_module.log(f"System message: {system_input}", "info")
-                        answer = ai_model.run(
-                            system_input=system_input,
-                            human_input=user_input,
-                            callbacks=[stream_handler],
-                        )
-                        new_context_window.save_context({"human_input": user_input}, {"output": answer})
-                    else:
-                        helper_module.log(f"Normal Chat Session Started...: {user_input}", "info")
-                        answer = ai_model.run(
-                            system_input=system_input,
-                            human_input=user_input,
-                            callbacks=[stream_handler],
-                        )
-
+        user_input = (
+            st.session_state.pop("transcript", "")
+            if st.session_state.use_audio
+            else st.chat_input("Prompt: ")
+        )
+        if user_input:
+            save_user_input_to_file(user_input)
+            system_input = handle_user_input(user_input, last_num)
+            if system_input:
+                with (st.spinner("Pippa MLX is typing ...")):
+                    helper_module.log(f"MLX Chat Session Started...: {user_input}", "info")
+                    ai_model, tokenizer = load(st.session_state.mlx_llm_model)
+                    answer = generate(ai_model, tokenizer,
+                                      prompt=user_input,
+                                      temp=st.session_state.mlx_temperature,
+                                      max_tokens=st.session_state.mlx_tokens,
+                                      verbose=False)
                     handle_message(AIMessage(content=answer), last_num + 2)
                     append_to_full_conversation_history(AIMessage(content=answer))
+            save_snapshot = True
+    else:
+        ai_model = select_model(memory=new_context_window)
 
-        save_snapshot = True
-        new_cost = display_cost_info(cb, answer, new_context_window)
-        st.session_state.costs.append(new_cost)
+        helper_module.log(f"Memory type: {st.session_state.memory_type}", "info")
 
-    display_costs_panel(st.session_state.get("costs", []))
-    display_conversation_history_panel(new_context_window, save_snapshot)
+        display_context_window_panel(new_context_window)
+        display_entire_conversation_history_panel()
+
+        last_num = len(get_full_conversation_history())
+        for i, message in enumerate(get_full_conversation_history(), start=1):
+            handle_message(message, i)
+        user_input = (
+            st.session_state.pop("transcript", "")
+            if st.session_state.use_audio
+            else st.chat_input("Prompt: ")
+        )
+
+        available_prefix_options = ["None"] + settings.ALL_PROMPT_PREFIXES
+
+        prefix_option = st.selectbox(
+            "Keyword Prefix",
+            available_prefix_options)
+
+        if user_input:
+            if prefix_option != "None":
+                user_input = f"{prefix_option} {user_input}"
+                helper_module.log(f"Keyword prefix used: {prefix_option} {user_input}", "info")
+            # try saving last user input in case of runtime error
+            save_user_input_to_file(user_input)
+            system_input = handle_user_input(user_input, last_num)
+            if system_input:
+                with (st.spinner("PippaGPT is typing ...")):
+                    with get_openai_callback() as cb:
+                        stream_handler = StreamHandler(st.empty())
+                        if user_input.lower().startswith(settings.PROMPT_KEYWORD_PREFIX_QA):
+                            memory = ConversationBufferMemory(input_key="question",
+                                                              memory_key="history")
+                            helper_module.log(f"Retrieval QA Session Started...: {user_input}", "info")
+                            display_vectordb_info()
+                            answer, docs = retrieval_qa_run(system_input, user_input, memory, callbacks=[stream_handler])
+                            if settings.SHOW_SOURCES:
+                                helper_module.log("----------------------------------SOURCE DOCUMENTS BEGIN---------------------------")
+                                for document in docs:
+                                    helper_module.log("\n> " + document.metadata["source"] + ":")
+                                    helper_module.log(document.page_content)
+                                helper_module.log("----------------------------------SOURCE DOCUMENTS END---------------------------")
+                                new_context_window.save_context({"human_input": user_input}, {"output": answer})
+                        elif is_agent_query(user_input):
+                            helper_module.log(f"Agent Session Started...: {user_input}", "info")
+                            prefix, agent, user_input = get_agent_from_user_input(user_input)
+                            intermediate_answer = agent(user_input)["output"]
+                            helper_module.log(f"Agent: {prefix}", "info")
+                            helper_module.log(f"Normal Chat Session Started...: {user_input}", "info")
+                            helper_module.log(f"User message: {user_input}", "info")
+                            helper_module.log(f"Intermediate answer: {intermediate_answer}", "info")
+
+                            if prefix == settings.PROMPT_KEYWORD_PREFIX_DALLE:
+                                pattern = r'\((.*?)\)'
+                                matches = re.findall(pattern, intermediate_answer)
+                                image_url = matches[0] if matches else None
+                                markdown_string = f'<a href="{image_url}" target="_blank"><img src="{image_url}" width="{settings.DALLE_IMAGE_SCALE_FACTOR}"/></a>'
+                                st.markdown(markdown_string, unsafe_allow_html=True)
+                            st.subheader("""Intermediate Answer from Agent""")
+                            st.markdown(intermediate_answer)
+
+                            system_input = system_input + " No matter what the user asked, you must give this answer exactly as it is including the markdown formatting in the language the user asked: " + intermediate_answer
+                            helper_module.log(f"System message: {system_input}", "info")
+                            answer = ai_model.run(
+                                system_input=system_input,
+                                human_input=user_input,
+                                callbacks=[stream_handler],
+                            )
+                            new_context_window.save_context({"human_input": user_input}, {"output": answer})
+                        else:
+                            helper_module.log(f"Normal Chat Session Started...: {user_input}", "info")
+                            answer = ai_model.run(
+                                system_input=system_input,
+                                human_input=user_input,
+                                callbacks=[stream_handler],
+                            )
+
+                        handle_message(AIMessage(content=answer), last_num + 2)
+                        append_to_full_conversation_history(AIMessage(content=answer))
+
+            save_snapshot = True
+            new_cost = display_cost_info(cb, answer, new_context_window)
+            st.session_state.costs.append(new_cost)
+
+        display_costs_panel(st.session_state.get("costs", []))
+        display_conversation_history_panel(new_context_window, save_snapshot)
 
 
 if __name__ == "__main__":
