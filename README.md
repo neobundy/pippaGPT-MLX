@@ -19,9 +19,9 @@ MLX is a new feature that allows you to use Apple MLX framework. It's still expe
 
 Retrieval QA module was inspired by [localGPT by Prompt Engineering](https://github.com/PromtEngineer/localGPT).
 
-* Selected MLX LLM models are supported including MLX whisper models.
-* OpenAI specific features are not supported when using MLX models.
-* MLX models retain no context. It's not compatible with LangChain memory types.
+* Selected MLX LLM models, including MLX whisper models, are supported.
+* OpenAI-specific features are not supported when using MLX models.
+* MLX models do not retain context and are incompatible with LangChain memory types.
 * MLX features require the following package:
 
 ```bash
