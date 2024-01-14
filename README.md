@@ -25,7 +25,7 @@ Retrieval QA module was inspired by [localGPT by Prompt Engineering](https://git
 * MLX features require the following package:
 
 ```bash
-  pip install mlx mlx-llm
+  pip install mlx mlx-lm
 ```
 Or simply rerun the following command:
 
