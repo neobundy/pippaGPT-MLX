@@ -7,6 +7,8 @@ Pippa is an open-source Large Language Model (LLM) chatbot project based on the 
 Pippa incorporates various features to enhance the adaptation process, including the ability to customize the chatbot's personality, ingest documents for learning, 
 remember conversation history, switch between different characters, and adapt to the user's needs. 
 
+MLX is a new feature that allows you to use Apple MLX framework. It's still experimental and not fully integrated yet.
+
 ## Features
 
 * Personalized: Users can tailor the chatbot's personality for a more engaging and customized conversational experience. 
@@ -16,6 +18,21 @@ remember conversation history, switch between different characters, and adapt to
 * Adaptive: Pippa adjusts to users' needs by modifying its conversational style and responses based on context.
 
 Retrieval QA module was inspired by [localGPT by Prompt Engineering](https://github.com/PromtEngineer/localGPT).
+
+* Selected MLX LLM models are supported including MLX whisper models.
+* OpenAI specific features are not supported when using MLX models.
+* MLX models retain no context. It's not compatible with LangChain memory types.
+* MLX features require the following package:
+
+```bash
+  pip install mlx mlx-llm
+```
+Or simply rerun the following command:
+
+```bash
+   pip install -r requirements.txt
+```
+
 
 ## Project Background
 
@@ -29,7 +46,7 @@ For a better experience, assign unique voices to the characters.
 
 ## Installation
 
-Tested with Python 3.10.
+Tested with Python 3.11.
 
 To install Pippa, follow these steps:
 
