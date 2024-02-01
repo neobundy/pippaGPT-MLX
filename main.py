@@ -49,6 +49,11 @@ import agents
 import settings
 
 
+@st.cache_resource
+def load_mlx_model(mlx_model):
+    return load(mlx_model)
+
+
 class StreamHandler(BaseCallbackHandler):
     def __init__(
         self, container: st.delta_generator.DeltaGenerator, initial_text: str = ""
@@ -794,7 +799,7 @@ def main():
             if system_input:
                 with (st.spinner("Pippa MLX is typing ...")):
                     helper_module.log(f"MLX Chat Session Started...: {user_input}", "info")
-                    ai_model, tokenizer = load(st.session_state.mlx_llm_model)
+                    ai_model, tokenizer = load_mlx_model(st.session_state.mlx_llm_model)
                     answer = generate(ai_model, tokenizer,
                                       prompt=user_input,
                                       temp=st.session_state.mlx_temperature,
